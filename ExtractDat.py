@@ -6,7 +6,7 @@ Classes for extracting data from Thermo Element ICP Mass Spectrometer dat files
 
 """
 Copyright (c) 2014 Dr. Philip Wenig
-Copyright (c) 2015-2017 John H. Hartman
+Copyright (c) 2015-2018 John H. Hartman
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License version
@@ -30,6 +30,8 @@ import glob
 import datetime
 import math
 from collections import defaultdict
+
+VERSION = 2.2
 
 HDR_INDEX_OFFSET = 33
 HDR_INDEX_LEN = 39
@@ -257,9 +259,11 @@ description = \
 """\
 Decodes the specified dat files and produces a CSV file of their contents. If a single file is
 specified the output file has the same base name with a ".csv" suffix. If multiple files are
-specified then the output file has the same base name as the first file with "combinedXX.csv"
-appended, where 'XX' is a sequence number to avoid overwriting existing output files. If a directory
-is specified then all dat files in the directory are processed as if they were all specified.
+specified then in addition to producing an output file for each input file an aggregate output
+file is produced containing the output from all of the input files. This aggregate output file
+has the same base name as the first file with "combinedXX.csv" appended, where 'XX' is a sequence 
+number to avoid overwriting existing output files. If a directory is specified then all dat files 
+in the directory are processed.
 """
 def main(args):
     """Stand-alone application"""
@@ -268,7 +272,7 @@ def main(args):
 
     usage = "Usage %prog [options] file [file ...]"
 
-    parser = optparse.OptionParser(version="%prog 2.1", usage=usage, description=description)
+    parser = optparse.OptionParser(version="%prog " + str(VERSION), usage=usage, description=description)
     parser.add_option("-c", "--comments",
                       action="store_true", dest="comments",
                       default=False,
@@ -318,45 +322,53 @@ def main(args):
         dirs = list(dirs)
         if len(dirs) == 1:
             outputdir = dirs[0]
-    base = os.path.splitext(os.path.split(dats[0].path)[1])[0]
+    combinedOutput = None
     if len(dats) > 1:
-        base += 'combined'
+        # create combined output file name from first dat file name
+        base = os.path.splitext(os.path.split(dats[0].path)[1])[0] + 'combined'
         i = 0
         while True:
-            outputfile = os.path.join(outputdir, base + '%02d' % i + '.csv')
-            if not os.path.exists(outputfile):
+            path = os.path.join(outputdir, base + '%02d' % i + '.csv')
+            if not os.path.exists(path):
                 break
             i += 1
-    else:
-        outputfile = os.path.join(outputdir, base + '.csv')
+        try:
+            combinedOutput = open(path, "w")
+            print "Writing to", path
+        except:
+            combinedOutput = None
+    #else:
+        #outputfile = os.path.join(outputdir, base + '.csv')
 
-    with open(outputfile, "w") as output:
+    printCombinedHeaders = True
 
-        print "Writing to", outputfile
-        elements = None
-        first = True
+    for dat in dats:
         headers = ["Scan", "Time", "ACF"]
-
-        for dat in dats:
+        printHeaders = True
+        outputfile = os.path.splitext(dat.path)[0] + '.csv'
+        with open(outputfile, "w") as output:
+            print "Writing to", outputfile
             dat.Open()   # TODO: context
-            if first:
-                # Read elements from FIN2 file if it exists.
-                try:
-                    name = os.path.splitext(dat.path)[0] + '.FIN2'
-                    with open(name, 'rb') as fin2:
-                        for i in xrange(0, 8):
-                            line = fin2.readline().strip()
-                        elements = line.split(',')[1:]
-                except:
-                    pass
+            # Read elements from FIN2 file if it exists.
+            try:
+                name = os.path.splitext(dat.path)[0] + '.FIN2'
+                with open(name, 'rb') as fin2:
+                    for i in xrange(0, 8):
+                        line = fin2.readline().strip()
+                    elements = line.split(',')[1:]
+            except:
+                elements = None
             if options.comments:
                 print >> output, dat.path, dat.timestamp, datetime.datetime.fromtimestamp(dat.timestamp)
+                if combinedOutput != None:
+                    print >> combinedOutput, dat.path, dat.timestamp, datetime.datetime.fromtimestamp(dat.timestamp)
+
             for i, scan in enumerate(dat):
                 timestamp = dat.timestamp + scan.time / 1000.0
                 results = [str(i+1), '%f' % timestamp, '%f' % scan.acf]
                 try:
                     for j, mass in enumerate(scan):
-                        if first:
+                        if printHeaders or printCombinedHeaders:
                             if elements is None:
                                 element = "Mass%02d" % (j+1)
                             else:
@@ -373,10 +385,17 @@ def main(args):
                 except UnknownKey, e:
                     print >> sys.stderr, "Warning: unknown key 0x%x" % int(e.message)
                     continue
-                if first:
-                    print >> output, ",".join(headers)
-                    first = False
-                print >> output, ",".join(results)
+                msg = ",".join(headers)
+                if printHeaders:
+                    print >> output, msg
+                    printHeaders = False
+                if printCombinedHeaders and combinedOutput != None:
+                    print >> combinedOutput, msg
+                    printCombinedHeaders = False
+                msg = ",".join(results)
+                print >> output, msg
+                if combinedOutput != None:
+                    print >> combinedOutput, msg
             dat.Close()
 
 if __name__ == '__main__':
