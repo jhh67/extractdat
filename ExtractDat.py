@@ -31,7 +31,7 @@ import datetime
 import math
 from collections import defaultdict
 
-VERSION = 2.2
+VERSION = '2.2.1'
 
 HDR_INDEX_OFFSET = 33
 HDR_INDEX_LEN = 39
@@ -42,6 +42,8 @@ SCAN_DELTA = 7
 SCAN_ACF = 12
 SCAN_PREV_TIME = 18
 SCAN_TIME = 19
+SCAN_EDAC = 31
+SCAN_FCF = 35
 
 def Debug(msg):
     if options.debug:
@@ -158,12 +160,12 @@ class Scan(object):
         dat.fd.seek(offset)
         self.headerSize = 47 * 4
         vals = struct.unpack("<%dI" % (self.headerSize / 4), dat.fd.read(self.headerSize))
-        self.number = vals[9]
-        self.delta = vals[7]
-        self.acf = vals[12]
-        self.time = vals[19]
-        self.fcf = vals[35]
-        self.edac = vals[31]
+        self.number = vals[SCAN_NUMBER]
+        self.delta = vals[SCAN_DELTA]
+        self.acf = vals[SCAN_ACF]
+        self.time = vals[SCAN_TIME]
+        self.fcf = vals[SCAN_FCF]
+        self.edac = vals[SCAN_EDAC]
         self._vals = vals
         self.fd = dat.fd
         self.offset = offset + self.headerSize # skip over header
@@ -272,7 +274,7 @@ def main(args):
 
     usage = "Usage %prog [options] file [file ...]"
 
-    parser = optparse.OptionParser(version="%prog " + str(VERSION), usage=usage, description=description)
+    parser = optparse.OptionParser(version="%prog " + VERSION, usage=usage, description=description)
     parser.add_option("-c", "--comments",
                       action="store_true", dest="comments",
                       default=False,
@@ -366,6 +368,8 @@ def main(args):
             for i, scan in enumerate(dat):
                 timestamp = dat.timestamp + scan.time / 1000.0
                 results = [str(i+1), '%f' % timestamp, '%f' % scan.acf]
+                values = []
+                valueHeaders = []
                 try:
                     for j, mass in enumerate(scan):
                         if printHeaders or printCombinedHeaders:
@@ -373,26 +377,34 @@ def main(args):
                                 element = "Mass%02d" % (j+1)
                             else:
                                 element = elements[j]
-                            for t in ['pulse', 'analog']:
-                                headers += ["%s%s" % (element, t[0])] * len(mass.measurements[t])
-                            headers.append('')
-                        for t in ['pulse', 'analog']:
-                            results += map(lambda x: str(x) if not str(x).startswith('-') else str(-x)+'*', mass.measurements[t])
-                        results.append('')
+                            modes = ['pulse', 'analog']
+                            if len(mass.measurements['faraday']) > 0:
+                                    modes.append('faraday')
+                            for t in modes:
+                                valueHeaders += ["%s%s" % (element, t[0])] * len(mass.measurements[t])
+                            valueHeaders.append('')
+                        for t in modes:
+                            values += map(lambda x: str(x) if not str(x).startswith('-') else str(-x)+'*', mass.measurements[t])
+                        values.append('')
+                    if 'faraday' in modes:
+                        headers.append('FCF')
+                        results.append('%f' % scan.fcf)
+
                 except UnknownDataType, e:
                     print >> sys.stderr, "Warning: unknown data type 0x%x" % int(e.message)
                     continue
                 except UnknownKey, e:
                     print >> sys.stderr, "Warning: unknown key 0x%x" % int(e.message)
                     continue
-                msg = ",".join(headers)
+                if printHeaders or printCombinedHeaders:
+                    msg = ",".join(headers + valueHeaders)
                 if printHeaders:
                     print >> output, msg
                     printHeaders = False
                 if printCombinedHeaders and combinedOutput != None:
                     print >> combinedOutput, msg
                     printCombinedHeaders = False
-                msg = ",".join(results)
+                msg = ",".join(results + values)
                 print >> output, msg
                 if combinedOutput != None:
                     print >> combinedOutput, msg
