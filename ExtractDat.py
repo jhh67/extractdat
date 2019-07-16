@@ -31,7 +31,7 @@ import datetime
 import math
 from collections import defaultdict
 
-VERSION = '2.2.1'
+VERSION = '2.2.2'
 
 HDR_INDEX_OFFSET = 33
 HDR_INDEX_LEN = 39
@@ -43,7 +43,7 @@ SCAN_ACF = 12
 SCAN_PREV_TIME = 18
 SCAN_TIME = 19
 SCAN_EDAC = 31
-SCAN_FCF = 35
+SCAN_FCF = 34
 
 def Debug(msg):
     if options.debug:
@@ -370,6 +370,7 @@ def main(args):
                 results = [str(i+1), '%f' % timestamp, '%f' % scan.acf]
                 values = []
                 valueHeaders = []
+                hasFaraday = False
                 try:
                     for j, mass in enumerate(scan):
                         if printHeaders or printCombinedHeaders:
@@ -380,13 +381,14 @@ def main(args):
                             modes = ['pulse', 'analog']
                             if len(mass.measurements['faraday']) > 0:
                                     modes.append('faraday')
+                                    hasFaraday = True
                             for t in modes:
                                 valueHeaders += ["%s%s" % (element, t[0])] * len(mass.measurements[t])
                             valueHeaders.append('')
                         for t in modes:
                             values += map(lambda x: str(x) if not str(x).startswith('-') else str(-x)+'*', mass.measurements[t])
                         values.append('')
-                    if 'faraday' in modes:
+                    if (printHeaders or printCombinedHeaders) and hasFaraday:
                         headers.append('FCF')
                         results.append('%f' % scan.fcf)
 
