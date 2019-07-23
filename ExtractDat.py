@@ -6,7 +6,7 @@ Classes for extracting data from Thermo Element ICP Mass Spectrometer dat files
 
 """
 Copyright (c) 2014 Dr. Philip Wenig
-Copyright (c) 2015-2018 John H. Hartman
+Copyright (c) 2015-2019 John H. Hartman
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License version
@@ -31,7 +31,7 @@ import datetime
 import math
 from collections import defaultdict
 
-VERSION = '2.2.2'
+VERSION = '2.2.3'
 
 HDR_INDEX_OFFSET = 33
 HDR_INDEX_LEN = 39
@@ -342,11 +342,8 @@ def main(args):
     #else:
         #outputfile = os.path.join(outputdir, base + '.csv')
 
-    printCombinedHeaders = True
-
     for dat in dats:
         headers = ["Scan", "Time", "ACF"]
-        printHeaders = True
         outputfile = os.path.splitext(dat.path)[0] + '.csv'
         with open(outputfile, "w") as output:
             print "Writing to", outputfile
@@ -370,26 +367,26 @@ def main(args):
                 results = [str(i+1), '%f' % timestamp, '%f' % scan.acf]
                 values = []
                 valueHeaders = []
-                hasFaraday = False
+                faraday = False
+                
                 try:
                     for j, mass in enumerate(scan):
-                        if printHeaders or printCombinedHeaders:
-                            if elements is None:
-                                element = "Mass%02d" % (j+1)
-                            else:
-                                element = elements[j]
-                            modes = ['pulse', 'analog']
-                            if len(mass.measurements['faraday']) > 0:
-                                    modes.append('faraday')
-                                    hasFaraday = True
-                            for t in modes:
-                                valueHeaders += ["%s%s" % (element, t[0])] * len(mass.measurements[t])
-                            valueHeaders.append('')
+                        modes = ['pulse', 'analog']
+                        if len(mass.measurements['faraday']) > 0:
+                            modes.append('faraday')
+                            faraday = True
+                        if headers is not None:
+                            element = "Mass%02d" % (j+1) if elements is None else elements[j]
+                            if headers is not None:
+                                for t in modes:
+                                    valueHeaders += ["%s%s" % (element, t[0])] * len(mass.measurements[t])
+                                valueHeaders.append('')
                         for t in modes:
                             values += map(lambda x: str(x) if not str(x).startswith('-') else str(-x)+'*', mass.measurements[t])
                         values.append('')
-                    if (printHeaders or printCombinedHeaders) and hasFaraday:
-                        headers.append('FCF')
+                    if faraday:
+                        if headers is not None:
+                            headers.append('FCF')
                         results.append('%f' % scan.fcf)
 
                 except UnknownDataType, e:
@@ -398,14 +395,12 @@ def main(args):
                 except UnknownKey, e:
                     print >> sys.stderr, "Warning: unknown key 0x%x" % int(e.message)
                     continue
-                if printHeaders or printCombinedHeaders:
+                if headers is not None:
                     msg = ",".join(headers + valueHeaders)
-                if printHeaders:
                     print >> output, msg
-                    printHeaders = False
-                if printCombinedHeaders and combinedOutput != None:
-                    print >> combinedOutput, msg
-                    printCombinedHeaders = False
+                    if combinedOutput != None:
+                        print >> combinedOutput, msg
+                    headers = None
                 msg = ",".join(results + values)
                 print >> output, msg
                 if combinedOutput != None:
