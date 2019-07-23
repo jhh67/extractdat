@@ -31,7 +31,7 @@ import datetime
 import math
 from collections import defaultdict
 
-VERSION = '2.2.3'
+VERSION = '2.3'
 
 HDR_INDEX_OFFSET = 33
 HDR_INDEX_LEN = 39
