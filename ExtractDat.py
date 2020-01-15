@@ -6,7 +6,7 @@ Classes for extracting data from Thermo Element ICP Mass Spectrometer dat files
 
 """
 Copyright (c) 2014 Dr. Philip Wenig
-Copyright (c) 2015-2019 John H. Hartman
+Copyright (c) 2015-2020 John H. Hartman
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License version
@@ -31,7 +31,7 @@ import datetime
 import math
 from collections import defaultdict
 
-VERSION = '2.3'
+VERSION = '2.4'
 
 HDR_INDEX_OFFSET = 33
 HDR_INDEX_LEN = 39
@@ -339,9 +339,8 @@ def main(args):
             print "Writing to", path
         except:
             combinedOutput = None
-    #else:
-        #outputfile = os.path.join(outputdir, base + '.csv')
 
+    first = True
     for dat in dats:
         headers = ["Scan", "Time", "ACF"]
         outputfile = os.path.splitext(dat.path)[0] + '.csv'
@@ -398,7 +397,7 @@ def main(args):
                 if headers is not None:
                     msg = ",".join(headers + valueHeaders)
                     print >> output, msg
-                    if combinedOutput != None:
+                    if combinedOutput != None and first:
                         print >> combinedOutput, msg
                     headers = None
                 msg = ",".join(results + values)
@@ -406,6 +405,7 @@ def main(args):
                 if combinedOutput != None:
                     print >> combinedOutput, msg
             dat.Close()
+            first = False
 
 if __name__ == '__main__':
     main(sys.argv)
